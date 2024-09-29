@@ -1,5 +1,6 @@
 #include <WiFi.h>           // For ESP32, use the WiFi library
 #include <PubSubClient.h>
+#include <DHT.h>
 #include <ArduinoJson.h>  // ArduinoJson 라이브러리 포함
 
 // WiFi 정보
@@ -13,8 +14,10 @@ const char* mqtt_server = "ec2-52-79-219-88.ap-northeast-2.compute.amazonaws.com
 WiFiClient espClient;
 PubSubClient client(espClient);
 
-// Soil Moisture Sensor 설정
-#define SOIL_MOISTURE_PIN 34  // Soil moisture sensor 연결 핀 (GPIO 34)
+// DHT 센서 설정
+#define DHTPIN 7     // DHT22 센서를 연결할 핀 (GPIO 4)
+#define DHTTYPE DHT22 // 사용 중인 센서 유형 (DHT22)
+DHT dht(DHTPIN, DHTTYPE);
 
 // 메시지 전송 간격 설정 (10초)
 const long interval = 10000; // 전송 주기 (밀리초)
@@ -73,7 +76,7 @@ void setup() {
   client.setServer(mqtt_server, 1883);
   client.setKeepAlive(120); // Keep-Alive 설정을 120초로 증가
   
-  pinMode(SOIL_MOISTURE_PIN, INPUT); // Soil Moisture sensor 핀을 입력으로 설정
+  dht.begin(); // DHT 센서 초기화
 }
 
 void loop() {
@@ -88,22 +91,28 @@ void loop() {
   if (currentMillis - previousMillis >= interval) {
     previousMillis = currentMillis;
 
-    // Soil moisture 센서 읽기 (0-4095 범위의 값)
-    int soilMoistureValue = analogRead(SOIL_MOISTURE_PIN);
+    // 온도와 습도 읽기
+    float humidity = dht.readHumidity();
+    float temperature = dht.readTemperature();
 
-    // Soil moisture 값을 퍼센트로 변환 (예시, 보정이 필요할 수 있음)
-    int soilMoisturePercent = map(soilMoistureValue, 0, 4095, 0, 100);
+    // 읽기 오류 체크
+    if (isnan(humidity) || isnan(temperature)) 
+    {
+      Serial.println("Failed to read from DHT sensor!");
+      return;
+    }
 
     // 데이터 출력
-    Serial.print("Soil Moisture Value: ");
-    Serial.print(soilMoistureValue);
-    Serial.print(" (");
-    Serial.print(soilMoisturePercent);
-    Serial.println("%)");
+    Serial.print("Humidity: ");
+    Serial.print(humidity);
+    Serial.print(" %, Temperature: ");
+    Serial.print(temperature);
+    Serial.println(" *C");
 
     // JSON 객체 생성
     StaticJsonDocument<200> jsonDoc; // JSON 문서 생성
-    jsonDoc["soil_moisture"] = soilMoisturePercent; // Soil moisture 데이터 추가
+    jsonDoc["humidity"] = humidity; // 습도 데이터 추가
+    jsonDoc["temperature"] = temperature; // 온도 데이터 추가
 
     char jsonBuffer[200];
     serializeJson(jsonDoc, jsonBuffer); // JSON 객체를 문자열로 변환
@@ -112,7 +121,7 @@ void loop() {
     Serial.println(jsonBuffer);
 
     // JSON 메시지 전송
-    if (client.publish("PLKIT/sensor/flow_rate/01", jsonBuffer, true)) 
+    if (client.publish("PLKIT/sensor/Temperature_Humidity/01", jsonBuffer, true)) 
     {
       Serial.println("JSON message published successfully");
     } 
