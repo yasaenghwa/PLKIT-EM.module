@@ -15,7 +15,7 @@ WiFiClient espClient;
 PubSubClient client(espClient);
 
 // DHT 센서 설정
-#define DHTPIN 7     // DHT22 센서를 연결할 핀 (GPIO 4)
+#define DHTPIN 15     // 
 #define DHTTYPE DHT22 // 사용 중인 센서 유형 (DHT22)
 DHT dht(DHTPIN, DHTTYPE);
 
