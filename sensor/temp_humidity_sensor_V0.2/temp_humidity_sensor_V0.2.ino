@@ -1,7 +1,7 @@
-#include <WiFi.h>           // For ESP32, use the WiFi library
+#include <WiFi.h>           
 #include <PubSubClient.h>
 #include <DHT.h>
-#include <ArduinoJson.h>  // ArduinoJson 라이브러리 포함
+#include <ArduinoJson.h>  
 
 // WiFi 정보
 const char* ssid = "PLKit";  // Wi-Fi 이름
@@ -15,8 +15,8 @@ WiFiClient espClient;
 PubSubClient client(espClient);
 
 // DHT 센서 설정
-#define DHTPIN 15     // 
-#define DHTTYPE DHT22 // 사용 중인 센서 유형 (DHT22)
+#define DHTPIN 7      
+#define DHTTYPE DHT22 
 DHT dht(DHTPIN, DHTTYPE);
 
 // 메시지 전송 간격 설정 (10초)
