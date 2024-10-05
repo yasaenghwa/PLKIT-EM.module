@@ -10,11 +10,11 @@ const char* password = "987654321";
 const char* mqtt_server = "ec2-52-79-219-88.ap-northeast-2.compute.amazonaws.com";
 
 // Soil Moisture Sensor 설정
-#define SOIL_MOISTURE_PIN 6   // Soil moisture sensor 연결 핀 (GPIO 5)
+#define SOIL_MOISTURE_PIN 7   // Soil moisture sensor 연결 핀 (GPIO 5)
 
 // Water Pump 제어 핀 설정 (HG7881 IN1: GPIO 6, IN2: GPIO 16)
-const int IN1 = 16;
-const int IN2 = 18;
+const int IN1 = 4;
+const int IN2 = 17;
 
 // MQTT 클라이언트 설정
 WiFiClient espClient;
@@ -37,8 +37,8 @@ void setup_wifi() {
 // MQTT 재연결 함수
 void reconnect() {
   while (!client.connected()) {
-    if (client.connect("ESP32Client")) {
-      client.subscribe("test", 1);  // Water pump 제어 토픽 구독
+    if (client.connect("ESP32Client1")) {
+      client.subscribe("PLKIT/control/Recycle_fluid", 1);  // Water pump 제어 토픽 구독
     } else {
       delay(5000);  // 연결 실패 시 5초 후 재시도
     }
@@ -84,7 +84,7 @@ void publishSensorData() {
   char jsonBuffer[200];
   serializeJson(jsonDoc, jsonBuffer);
 
-  client.publish("PLKIT/sensor/Soil_Moisture/01", jsonBuffer, true);  // 센서 데이터를 MQTT로 전송
+  client.publish("PLKIT/sensor/Soil_Moisture/02", jsonBuffer, true);  // 센서 데이터를 MQTT로 전송
 }
 
 void setup() {
