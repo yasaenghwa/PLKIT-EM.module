@@ -1,20 +1,14 @@
 #include <WiFi.h>           
 #include <PubSubClient.h>
 #include <ArduinoJson.h>
-
-// WiFi 정보
-const char* ssid = "PLKit";  
-const char* password = "987654321";
-
-// MQTT 브로커 정보
-const char* mqtt_server = "ec2-52-79-219-88.ap-northeast-2.compute.amazonaws.com";
+#include "network_ip_info.h"  // 보안 데이터 처리 헤더 파일
 
 // WiFi 및 MQTT 클라이언트 초기화
 WiFiClient espClient;
 PubSubClient client(espClient);
 
 // CDS 조도 센서 설정
-#define CDS_SENSOR_PIN 5  // CDS 조도 센서 연결 핀 (GPIO 34)
+#define CDS_SENSOR_PIN 7  // CDS 조도 센서 연결 핀 (GPIO 5)
 
 // 메시지 전송 간격 설정 (10초)
 const long interval = 10000; 
@@ -24,6 +18,8 @@ void setup_wifi()
 {
   delay(10);
   Serial.println();
+  const char* ssid = decryptData(getEncryptedSSID());
+  const char* password = decryptData(getEncryptedPassword());
   Serial.print("Connecting to ");
   Serial.println(ssid);
 
@@ -67,6 +63,7 @@ void reconnect()
 void setup() {
   Serial.begin(115200); 
   setup_wifi();
+  const char* mqtt_server = decryptData(getEncryptedMqttServer());
   client.setServer(mqtt_server, 1883);
   client.setKeepAlive(120); 
   

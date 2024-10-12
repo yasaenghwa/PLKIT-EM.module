@@ -1,16 +1,11 @@
 #include <WiFi.h>
 #include <PubSubClient.h>
 #include <ArduinoJson.h>
+#include "network_ip_info.h"  // 보안 데이터 처리 헤더 파일
 
-// Wi-Fi 정보
-const char* ssid = "PLKit";
-const char* password = "987654321";
-
-// MQTT 서버 정보
-const char* mqtt_server = "ec2-52-79-219-88.ap-northeast-2.compute.amazonaws.com";
-
-// 릴레이 제어 핀 설정 (GPIO 17번 사용)
-const int relayPin = 17;
+// 릴레이 제어 핀 설정
+const int ledRelayPin = 6;  // LED 릴레이 핀 (GPIO 6)
+const int fanRelayPin = 17;  // Fan 릴레이 핀 (GPIO 17)
 
 // MQTT 클라이언트 설정
 WiFiClient espClient;
@@ -19,19 +14,36 @@ PubSubClient client(espClient);
 // Wi-Fi 연결 함수
 void setup_wifi() {
   delay(10);
+  Serial.println();
+  const char* ssid = decryptData(getEncryptedSSID());
+  const char* password = decryptData(getEncryptedPassword());
+  Serial.print("Connecting to ");
+  Serial.println(ssid);
   WiFi.begin(ssid, password);
 
   while (WiFi.status() != WL_CONNECTED) {
     delay(100);
+    Serial.print(".");
   }
+  Serial.println();
+  Serial.println("WiFi connected");
+  Serial.print("IP address: ");
+  Serial.println(WiFi.localIP());
 }
 
 // MQTT 재연결 함수 (QoS 설정 포함)
 void reconnect() {
   while (!client.connected()) {
+    Serial.print("Attempting MQTT connection...");
     if (client.connect("ESP32Client")) {
-      client.subscribe("test", 1);  // QoS 1로 "test" 토픽 구독
+      Serial.println("connected");
+      // 각 제어 토픽 구독
+      client.subscribe("PLKIT/control/Light", 1);  // LED 제어 토픽
+      client.subscribe("PLKIT/control/fan", 1);  // Fan 제어 토픽
     } else {
+      Serial.print("failed, rc=");
+      Serial.print(client.state());
+      Serial.println(" try again in 2 seconds");
       delay(2000);  // 연결 실패 시 2초 후 재시도
     }
   }
@@ -39,16 +51,28 @@ void reconnect() {
 
 // LED 제어 함수
 void controlLED(String command) {
-  if (command == "1") {
-    digitalWrite(relayPin, HIGH);  // 릴레이 활성화, LED 켜짐
-  } else if (command == "0") {
-    digitalWrite(relayPin, LOW);   // 릴레이 비활성화, LED 꺼짐
+  if (command == "on") {
+    digitalWrite(ledRelayPin, HIGH);  // 릴레이 활성화, LED 켜짐
+    Serial.println("LED turned ON");
+  } else if (command == "off") {
+    digitalWrite(ledRelayPin, LOW);   // 릴레이 비활성화, LED 꺼짐
+    Serial.println("LED turned OFF");
+  }
+}
+
+// Fan 제어 함수
+void controlFan(String command) {
+  if (command == "on") {
+    digitalWrite(fanRelayPin, HIGH);  // 릴레이 활성화, Fan 켜짐
+    Serial.println("Fan turned ON");
+  } else if (command == "off") {
+    digitalWrite(fanRelayPin, LOW);   // 릴레이 비활성화, Fan 꺼짐
+    Serial.println("Fan turned OFF");
   }
 }
 
 // MQTT 메시지 수신 콜백 함수 (JSON 파싱 포함)
 void callback(char* topic, byte* payload, unsigned int length) {
-  // 메시지 버퍼에 저장
   char message[length + 1];
   for (int i = 0; i < length; i++) {
     message[i] = (char)payload[i];
@@ -61,15 +85,28 @@ void callback(char* topic, byte* payload, unsigned int length) {
 
   if (!error) {
     String command = doc["command"].as<String>();
-    controlLED(command);  // LED 제어
+
+    // 해당 토픽에 따라 제어
+    if (String(topic) == "PLKIT/control/Light") {
+      controlLED(command);  // LED 제어
+    } else if (String(topic) == "PLKIT/control/fan") {
+      controlFan(command);  // Fan 제어
+    }
+  } else {
+    Serial.println("Failed to parse JSON");
   }
 }
 
 void setup() {
-  pinMode(relayPin, OUTPUT);
-  digitalWrite(relayPin, LOW);  // 초기 상태는 OFF
+  Serial.begin(115200);  // 시리얼 통신 초기화
+  pinMode(ledRelayPin, OUTPUT);
+  digitalWrite(ledRelayPin, LOW);  // LED 초기 상태는 OFF
+
+  pinMode(fanRelayPin, OUTPUT);
+  digitalWrite(fanRelayPin, LOW);  // Fan 초기 상태는 OFF
 
   setup_wifi();  // Wi-Fi 연결 설정
+  const char* mqtt_server = decryptData(getEncryptedMqttServer());
   client.setServer(mqtt_server, 1883);
   client.setCallback(callback);  // MQTT 콜백 함수 설정
 }

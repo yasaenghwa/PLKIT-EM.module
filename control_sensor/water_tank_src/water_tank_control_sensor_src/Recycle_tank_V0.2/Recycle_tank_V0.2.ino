@@ -1,18 +1,12 @@
 #include <WiFi.h>
 #include <PubSubClient.h>
 #include <ArduinoJson.h>
+#include "network_ip_info.h"  // 보안 데이터 처리 헤더 파일
 
-// Wi-Fi 정보
-const char* ssid = "PLKit";
-const char* password = "987654321";
+// Water Level Sensor 설정
+#define WATER_LEVEL_PIN 7   // Water level sensor 연결 핀 (GPIO 7)
 
-// MQTT 브로커 정보
-const char* mqtt_server = "ec2-52-79-219-88.ap-northeast-2.compute.amazonaws.com";
-
-// Soil Moisture Sensor 설정
-#define SOIL_MOISTURE_PIN 7   // Soil moisture sensor 연결 핀 (GPIO 5)
-
-// Water Pump 제어 핀 설정 (HG7881 IN1: GPIO 6, IN2: GPIO 16)
+// Water Pump 제어 핀 설정 (HG7881 IN1: GPIO 4, IN2: GPIO 17)
 const int IN1 = 4;
 const int IN2 = 17;
 
@@ -27,6 +21,8 @@ unsigned long previousMillis = 0;  // 이전 전송 시간 기록
 // Wi-Fi 연결 함수
 void setup_wifi() {
   delay(10);
+  const char* ssid = decryptData(getEncryptedSSID());
+  const char* password = decryptData(getEncryptedPassword());
   WiFi.begin(ssid, password);
 
   while (WiFi.status() != WL_CONNECTED) {
@@ -37,8 +33,8 @@ void setup_wifi() {
 // MQTT 재연결 함수
 void reconnect() {
   while (!client.connected()) {
-    if (client.connect("ESP32Client1")) {
-      client.subscribe("PLKIT/control/Recycle_fluid", 1);  // Water pump 제어 토픽 구독
+    if (client.connect("ESP32Client")) {
+      client.subscribe("PLKIT/control/Recycle_fluid_tank", 1);  // Water pump 제어 토픽 구독
     } else {
       delay(5000);  // 연결 실패 시 5초 후 재시도
     }
@@ -75,20 +71,20 @@ void callback(char* topic, byte* payload, unsigned int length) {
 
 // 센서 데이터 전송 함수
 void publishSensorData() {
-  int soilMoistureValue = analogRead(SOIL_MOISTURE_PIN);
-  int soilMoisturePercent = map(soilMoistureValue, 0, 4095, 0, 100);  // 센서 값을 퍼센트로 변환
+  int waterLevelValue = analogRead(WATER_LEVEL_PIN);
+  int waterLevelPercent = map(waterLevelValue, 0, 4095, 0, 100);  // 센서 값을 퍼센트로 변환
 
   StaticJsonDocument<200> jsonDoc;
-  jsonDoc["soil_moisture"] = soilMoisturePercent;
+  jsonDoc["water_level"] = waterLevelPercent;
 
   char jsonBuffer[200];
   serializeJson(jsonDoc, jsonBuffer);
 
-  client.publish("PLKIT/sensor/Soil_Moisture/02", jsonBuffer, true);  // 센서 데이터를 MQTT로 전송
+  client.publish("PLKIT/sensor/water_level/02", jsonBuffer, true);  // 센서 데이터를 MQTT로 전송
 }
 
 void setup() {
-  pinMode(SOIL_MOISTURE_PIN, INPUT);  // 센서 핀 설정
+  pinMode(WATER_LEVEL_PIN, INPUT);  // 센서 핀 설정
   pinMode(IN1, OUTPUT);  // 펌프 제어 핀 설정
   pinMode(IN2, OUTPUT);
   digitalWrite(IN1, LOW);
@@ -96,6 +92,7 @@ void setup() {
 
   Serial.begin(115200);
   setup_wifi();  // Wi-Fi 연결 설정
+  const char* mqtt_server = decryptData(getEncryptedMqttServer());
   client.setServer(mqtt_server, 1883);
   client.setCallback(callback);  // MQTT 콜백 함수 설정
 }

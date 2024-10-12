@@ -2,22 +2,16 @@
 #include <PubSubClient.h>
 #include <DHT.h>
 #include <ArduinoJson.h>  
+#include "network_ip_info.h"  // 보안 데이터 처리 헤더 파일
 
-// WiFi 정보
-const char* ssid = "PLKit";  // Wi-Fi 이름
-const char* password = "987654321";  // Wi-Fi 비밀번호
-
-// MQTT 브로커 정보
-const char* mqtt_server = "ec2-52-79-219-88.ap-northeast-2.compute.amazonaws.com"; // MQTT 브로커 주소
+// DHT 센서 설정
+#define DHTPIN 16      
+#define DHTTYPE DHT22 
+DHT dht(DHTPIN, DHTTYPE);
 
 // WiFi 및 MQTT 클라이언트 초기화
 WiFiClient espClient;
 PubSubClient client(espClient);
-
-// DHT 센서 설정
-#define DHTPIN 7      
-#define DHTTYPE DHT22 
-DHT dht(DHTPIN, DHTTYPE);
 
 // 메시지 전송 간격 설정 (10초)
 const long interval = 10000; // 전송 주기 (밀리초)
@@ -28,6 +22,8 @@ void setup_wifi()
 {
   delay(10);
   Serial.println();
+  const char* ssid = decryptData(getEncryptedSSID());
+  const char* password = decryptData(getEncryptedPassword());
   Serial.print("Connecting to ");
   Serial.println(ssid);
 
@@ -73,6 +69,7 @@ void reconnect()
 void setup() {
   Serial.begin(115200);  // Baud rate 설정
   setup_wifi();
+  const char* mqtt_server = decryptData(getEncryptedMqttServer());
   client.setServer(mqtt_server, 1883);
   client.setKeepAlive(120); // Keep-Alive 설정을 120초로 증가
   

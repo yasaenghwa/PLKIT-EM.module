@@ -1,20 +1,17 @@
 #include "esp_camera.h"   // ESP32 카메라 라이브러리 추가
 #include <WiFi.h>
 #include <WebSocketsClient.h>
+#include "ipconfig.h"  // 보안 데이터 처리 헤더 파일
 
 // 카메라 모델 선택 (ESP32-S3-WROOM-1 + OV2640)
 #define CAMERA_MODEL_ESP32S3_EYE // Has PSRAM
 #include "camera_pins.h"
 
 // Wi-Fi 설정
-const char* ssid = "PLKit";      // Wi-Fi SSID
-const char* password = "987654321";  // Wi-Fi 비밀번호
+
 
 // WebSocket 설정
 WebSocketsClient webSocket;
-const char* websocket_server_host = "52.79.219.88";  // WebSocket 서버 IP 주소
-const uint16_t websocket_server_port = 80;           // WebSocket 서버 포트
-const char* websocket_server_path = "/ws/video_feed";  // WebSocket 경로
 
 void cameraInit(void);
 void sendVideoFrame();

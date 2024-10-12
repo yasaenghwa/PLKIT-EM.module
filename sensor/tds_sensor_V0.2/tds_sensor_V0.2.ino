@@ -1,6 +1,7 @@
 #include <WiFi.h>
 #include <PubSubClient.h>
 #include <ArduinoJson.h>
+#include "network_ip_info.h"  // 보안 데이터 처리 헤더 파일
 
 #define TdsSensorPin 5  // TDS 센서 핀(GPIO 34)
 #define VREF 3.3         // ESP32 Vref
@@ -9,10 +10,6 @@ int analogBuffer[SCOUNT];  // ADC 값 버퍼
 int analogBufferTemp[SCOUNT];
 int analogBufferIndex = 0, copyIndex = 0;
 float averageVoltage = 0, tdsValue = 0, temperature = 25;
-
-const char* ssid = "PLKit";
-const char* password = "987654321";
-const char* mqtt_server = "ec2-52-79-219-88.ap-northeast-2.compute.amazonaws.com";
 
 WiFiClient espClient;
 PubSubClient client(espClient);
@@ -24,6 +21,8 @@ void setup_wifi() {
   delay(10);
   Serial.println();
   Serial.print("Connecting to ");
+  const char* ssid = decryptData(getEncryptedSSID());
+  const char* password = decryptData(getEncryptedPassword());
   Serial.println(ssid);
 
   WiFi.begin(ssid, password);
@@ -53,6 +52,7 @@ void reconnect() {
 void setup() {
   Serial.begin(115200);
   setup_wifi();
+  const char* mqtt_server = decryptData(getEncryptedMqttServer());
   client.setServer(mqtt_server, 1883);
   client.setKeepAlive(120);
 
@@ -111,14 +111,12 @@ void loop() {
 
 // 중간값 필터링 함수
 int getMedianNum(int bArray[], int iFilterLen) {
-  // 입력된 배열을 복사하여 중간 값을 구할 배열 생성
   int bTab[iFilterLen];
   for (byte i = 0; i < iFilterLen; i++)
     bTab[i] = bArray[i];
 
   int i, j, bTemp;
   
-  // 버블 정렬을 사용하여 배열을 오름차순으로 정렬
   for (j = 0; j < iFilterLen - 1; j++) {
     for (i = 0; i < iFilterLen - j - 1; i++) {
       if (bTab[i] > bTab[i + 1]) {
@@ -129,12 +127,10 @@ int getMedianNum(int bArray[], int iFilterLen) {
     }
   }
 
-  // 배열 길이가 홀수인 경우, 중간값을 반환
   if ((iFilterLen & 1) > 0)
     bTemp = bTab[(iFilterLen - 1) / 2];
-  // 배열 길이가 짝수인 경우, 중간 두 값의 평균을 반환
   else
     bTemp = (bTab[iFilterLen / 2] + bTab[iFilterLen / 2 - 1]) / 2;
   
-  return bTemp;  // 최종 중간값 반환
+  return bTemp;
 }
