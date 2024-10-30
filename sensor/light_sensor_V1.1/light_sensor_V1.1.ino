@@ -1,19 +1,20 @@
-#include <WiFi.h>           
+#include <WiFi.h>
 #include <PubSubClient.h>
 #include <ArduinoJson.h>
 #include <BLEDevice.h>
 #include <BLEUtils.h>
 #include <BLEClient.h>
 #include <BLEScan.h>
-#include "network_ip_info.h"
+
 
 // CDS 조도 센서 설정
 #define CDS_SENSOR_PIN 7  
 
 // BLE 설정
-#define SERVICE_UUID        "12345678-1234-1234-1234-123456789012"
-#define SSID_CHARACTERISTIC_UUID "87654321-4321-4321-4321-210987654321"
-#define PASSWORD_CHARACTERISTIC_UUID "87654321-4321-4321-4321-210987654322"
+#define SERVICE_UUID           "736D6172-7462-6F61-7264-5F706C6B6974"
+#define SSID_CHARACTERISTIC_UUID  "5F706C6B-6974-5F77-6966-695F6E616D65"
+#define PASSWORD_CHARACTERISTIC_UUID  "5F5F706C-6B69-745F-7061-7373776F7264"
+#define MQTT_CHARACTERISTIC_UUID  "5F5F706D-7174-745F-7365-727665725F49"  // MQTT 서버 IP 특성 UUID
 
 static BLEAddress *pServerAddress = nullptr;
 bool doConnect = false;
@@ -21,13 +22,14 @@ bool connected = false;
 BLEClient* pClient = nullptr;
 String ssid = "";      
 String password = "";  
+String mqttServerIP = "";  // MQTT 서버 IP
 
 // WiFi 및 MQTT 클라이언트 초기화
 WiFiClient espClient;
 PubSubClient client(espClient);
 
-// 메시지 전송 간격 설정 (10초)
-const long interval = 10000; 
+// 메시지 전송 간격 설정 (30초)
+const long interval = 30000; 
 unsigned long previousMillis = 0;
 
 // 클라이언트 콜백 클래스
@@ -59,7 +61,7 @@ class MyAdvertisedDeviceCallbacks: public BLEAdvertisedDeviceCallbacks {
   }
 };
 
-// 서버에 연결하여 두 값을 수신
+// 서버에 연결하여 Wi-Fi 및 MQTT 서버 정보 수신
 void connectToServer() {
   pClient = BLEDevice::createClient();
   pClient->setClientCallbacks(new MyClientCallback());
@@ -92,6 +94,15 @@ void connectToServer() {
   }
   password = pPasswordCharacteristic->readValue().c_str();
   Serial.println("Received Password: " + password);
+
+  // MQTT 서버 IP 특성 읽기
+  BLERemoteCharacteristic* pMQTTCharacteristic = pRemoteService->getCharacteristic(MQTT_CHARACTERISTIC_UUID);
+  if (pMQTTCharacteristic == nullptr) {
+    Serial.println("Failed to find MQTT Server IP characteristic UUID");
+    return;
+  }
+  mqttServerIP = pMQTTCharacteristic->readValue().c_str();
+  Serial.println("Received MQTT Server IP: " + mqttServerIP);
 
   // 값 수신 후 명시적으로 연결 끊기
   pClient->disconnect();
@@ -139,7 +150,7 @@ void setup() {
   BLEScan* pBLEScan = BLEDevice::getScan();
   pBLEScan->setAdvertisedDeviceCallbacks(new MyAdvertisedDeviceCallbacks());
   pBLEScan->setActiveScan(true);
-  pBLEScan->start(30);  
+  pBLEScan->start(360);  
 
   pinMode(CDS_SENSOR_PIN, INPUT); // CDS 센서 핀 설정
 }
@@ -151,10 +162,10 @@ void loop() {
     doConnect = false;
 
     // Wi-Fi 연결 시도
-    if (ssid != "" && password != "") {
+    if (ssid != "" && password != "" && mqttServerIP != "") {
       connectToWiFi(ssid.c_str(), password.c_str());
-      client.setServer(mqtt_server, 1883);
-      client.setKeepAlive(120); 
+      client.setServer(mqttServerIP.c_str(), 1883);  // 수신한 MQTT 서버 IP 설정
+      client.setKeepAlive(120);  // Keep-Alive 설정
     }
   }
 

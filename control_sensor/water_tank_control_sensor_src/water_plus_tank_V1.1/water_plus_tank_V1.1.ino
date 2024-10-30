@@ -5,33 +5,33 @@
 #include <BLEUtils.h>
 #include <BLEClient.h>
 #include <BLEScan.h>
-#include "network_ip_info.h"
 
 // Water Level Sensor 설정
-#define WATER_LEVEL_PIN 7  // Water level sensor 연결 핀 (GPIO 7)
+#define water_level_PIN 6  // Water level sensor 연결 핀 (GPIO 6)
 
-// Water Pump 제어 핀 설정 (HG7881 IN1: GPIO 4, IN2: GPIO 17)
-const int IN1 = 4;
+// Water Pump 제어 핀 설정 (IN1: GPIO 3, IN2: GPIO 17)
+const int IN1 = 3;
 const int IN2 = 17;
 
 // BLE 설정
-#define SERVICE_UUID        "12345678-1234-1234-1234-123456789012"
-#define SSID_CHARACTERISTIC_UUID "87654321-4321-4321-4321-210987654321"
-#define PASSWORD_CHARACTERISTIC_UUID "87654321-4321-4321-4321-210987654322"
+#define SERVICE_UUID           "736D6172-7462-6F61-7264-5F706C6B6974"  // Service UUID
+#define CHARACTERISTIC_UUID_SSID  "5F706C6B-6974-5F77-6966-695F6E616D65"  // SSID Characteristic UUID
+#define CHARACTERISTIC_UUID_PASS  "5F5F706C-6B69-745F-7061-7373776F7264"  // Password Characteristic UUID
+#define CHARACTERISTIC_UUID_MQTT  "5F5F706D-7174-745F-7365-727665725F49"  // MQTT 서버 IP 특성 UUID
 
 static BLEAddress *pServerAddress = nullptr;
 bool doConnect = false;
-bool connected = false;
 BLEClient* pClient = nullptr;
 String ssid = "";      
 String password = "";  
+String mqttServer = "";  // MQTT 서버 IP
 
 // MQTT 클라이언트 설정
 WiFiClient espClient;
 PubSubClient client(espClient);
 
-// 메시지 전송 간격 설정 (10초)
-const long interval = 10000;  // 센서 데이터 전송 주기 (밀리초)
+// 메시지 전송 간격 설정 (30초)
+const long interval = 30000;  // 센서 데이터 전송 주기 (밀리초)
 unsigned long previousMillis = 0;  // 이전 전송 시간 기록
 
 // Wi-Fi 연결 함수
@@ -55,7 +55,7 @@ void reconnect() {
     Serial.print("Attempting MQTT connection...");
     if (client.connect("ESP32Client")) {
       Serial.println("connected");
-      client.subscribe("PLKIT/control/Recycle_pump", 1);  // Water pump 제어 토픽 구독
+      client.subscribe("PLKIT/control/Plus_water_pump", 1);  // Water pump 제어 토픽 구독
     } else {
       delay(5000);  // 연결 실패 시 5초 후 재시도
     }
@@ -92,17 +92,16 @@ void callback(char* topic, byte* payload, unsigned int length) {
 
 // 센서 데이터 전송 함수
 void publishSensorData() {
-  int waterLevelValue = analogRead(WATER_LEVEL_PIN);
+  int waterLevelValue = analogRead(water_level_PIN);
   int waterLevelPercent = map(waterLevelValue, 0, 4095, 0, 100);  // 센서 값을 퍼센트로 변환
 
   StaticJsonDocument<200> jsonDoc;
-  
   jsonDoc["water_level"] = waterLevelPercent;
 
   char jsonBuffer[200];
   serializeJson(jsonDoc, jsonBuffer);
 
-  client.publish("PLKIT/sensor/water_level/03", jsonBuffer, true);  // 센서 데이터를 MQTT로 전송
+  client.publish("PLKIT/sensor/water_level/02", jsonBuffer, true);  // 센서 데이터를 MQTT로 전송
 }
 
 // BLE 클라이언트 콜백 클래스 (onConnect, onDisconnect 함수 구현)
@@ -116,7 +115,7 @@ class MyClientCallback : public BLEClientCallbacks {
   }
 };
 
-// 서버에 연결하여 두 값을 수신 (BLE)
+// 서버에 연결하여 세 값을 수신 (BLE)
 void connectToServer() {
   pClient = BLEDevice::createClient();
   pClient->setClientCallbacks(new MyClientCallback());  // 콜백 설정
@@ -133,7 +132,7 @@ void connectToServer() {
   }
 
   // SSID 특성 읽기
-  BLERemoteCharacteristic* pSSIDCharacteristic = pRemoteService->getCharacteristic(SSID_CHARACTERISTIC_UUID);
+  BLERemoteCharacteristic* pSSIDCharacteristic = pRemoteService->getCharacteristic(CHARACTERISTIC_UUID_SSID);
   if (pSSIDCharacteristic == nullptr) {
     Serial.println("Failed to find SSID characteristic UUID");
     return;
@@ -142,13 +141,22 @@ void connectToServer() {
   Serial.println("Received SSID: " + ssid);
 
   // Password 특성 읽기
-  BLERemoteCharacteristic* pPasswordCharacteristic = pRemoteService->getCharacteristic(PASSWORD_CHARACTERISTIC_UUID);
+  BLERemoteCharacteristic* pPasswordCharacteristic = pRemoteService->getCharacteristic(CHARACTERISTIC_UUID_PASS);
   if (pPasswordCharacteristic == nullptr) {
     Serial.println("Failed to find Password characteristic UUID");
     return;
   }
   password = pPasswordCharacteristic->readValue().c_str();
   Serial.println("Received Password: " + password);
+
+  // MQTT 서버 IP 특성 읽기
+  BLERemoteCharacteristic* pMQTTCharacteristic = pRemoteService->getCharacteristic(CHARACTERISTIC_UUID_MQTT);
+  if (pMQTTCharacteristic == nullptr) {
+    Serial.println("Failed to find MQTT Server IP characteristic UUID");
+    return;
+  }
+  mqttServer = pMQTTCharacteristic->readValue().c_str();
+  Serial.println("Received MQTT Server IP: " + mqttServer);
 
   // 값 수신 후 명시적으로 연결 끊기
   pClient->disconnect();
@@ -175,7 +183,7 @@ void setup() {
   Serial.println("Starting BLE scan...");
 
   // 센서 및 펌프 핀 설정
-  pinMode(WATER_LEVEL_PIN, INPUT);
+  pinMode(water_level_PIN, INPUT);
   pinMode(IN1, OUTPUT);
   pinMode(IN2, OUTPUT);
   digitalWrite(IN1, LOW);
@@ -187,7 +195,7 @@ void setup() {
   BLEScan* pBLEScan = BLEDevice::getScan();
   pBLEScan->setAdvertisedDeviceCallbacks(new MyAdvertisedDeviceCallbacks());
   pBLEScan->setActiveScan(true);
-  pBLEScan->start(30);  // 30초 동안 스캔
+  pBLEScan->start(360);  
 }
 
 void loop() {
@@ -199,7 +207,7 @@ void loop() {
     // Wi-Fi 연결 시도
     if (ssid != "" && password != "") {
       connectToWiFi(ssid.c_str(), password.c_str());
-      client.setServer(mqtt_server, 1883);
+      client.setServer(mqttServer.c_str(), 1883);  // BLE로 수신한 MQTT 서버 설정
       client.setCallback(callback);  // MQTT 콜백 함수 설정
     }
   }

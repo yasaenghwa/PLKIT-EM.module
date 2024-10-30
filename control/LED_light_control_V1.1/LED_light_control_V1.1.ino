@@ -7,7 +7,8 @@
 #include <BLEScan.h>
 
 // 릴레이 제어 핀 설정
-const int heaterRelayPin = 17;  // Heater 릴레이 핀 (GPIO 17)
+const int ledRelayPin = 6;  // LED 릴레이 핀 (GPIO 6)
+const int fanRelayPin = 17;  // Fan 릴레이 핀 (GPIO 17)
 
 // BLE 설정
 #define SERVICE_UUID           "736D6172-7462-6F61-7264-5F706C6B6974"  // Service UUID
@@ -44,10 +45,11 @@ void connectToWiFi(const char* ssid, const char* password) {
 // MQTT 재연결 함수
 void reconnect() {
   while (!client.connected()) {
-    Serial.print("Attempting MQTT connection...");
+    // Serial.print("Attempting MQTT connection..."); // 이 부분을 제거
     if (client.connect("ESP32Client")) {
-      // Heater 제어 토픽 구독
-      client.subscribe("PLKIT/control/heater", 1);  // Heater 제어 토픽
+      // 각 제어 토픽 구독
+      client.subscribe("PLKIT/control/Light", 1);  // LED 제어 토픽
+      client.subscribe("PLKIT/control/fan", 1);  // Fan 제어 토픽
     } else {
       Serial.print("failed, rc=");
       Serial.print(client.state());
@@ -57,14 +59,25 @@ void reconnect() {
   }
 }
 
-// Heater 제어 함수
-void controlHeater(String command) {
+// LED 제어 함수
+void controlLED(String command) {
   if (command == "on") {
-    digitalWrite(heaterRelayPin, HIGH);  // 릴레이 활성화, Heater 켜짐
-    Serial.println("Heater turned ON");
+    digitalWrite(ledRelayPin, HIGH);  // 릴레이 활성화, LED 켜짐
+    Serial.println("LED turned ON");
   } else if (command == "off") {
-    digitalWrite(heaterRelayPin, LOW);   // 릴레이 비활성화, Heater 꺼짐
-    Serial.println("Heater turned OFF");
+    digitalWrite(ledRelayPin, LOW);   // 릴레이 비활성화, LED 꺼짐
+    Serial.println("LED turned OFF");
+  }
+}
+
+// Fan 제어 함수
+void controlFan(String command) {
+  if (command == "on") {
+    digitalWrite(fanRelayPin, HIGH);  // 릴레이 활성화, Fan 켜짐
+    Serial.println("Fan turned ON");
+  } else if (command == "off") {
+    digitalWrite(fanRelayPin, LOW);   // 릴레이 비활성화, Fan 꺼짐
+    Serial.println("Fan turned OFF");
   }
 }
 
@@ -83,9 +96,11 @@ void callback(char* topic, byte* payload, unsigned int length) {
   if (!error) {
     String command = doc["command"].as<String>();
 
-    // Heater 제어
-    if (String(topic) == "PLKIT/control/heater") {
-      controlHeater(command);  // Heater 제어
+    // 해당 토픽에 따라 제어
+    if (String(topic) == "PLKIT/control/Light") {
+      controlLED(command);  // LED 제어
+    } else if (String(topic) == "PLKIT/control/fan") {
+      controlFan(command);  // Fan 제어
     }
   } else {
     Serial.println("Failed to parse JSON");
@@ -171,8 +186,11 @@ void setup() {
   Serial.println("Starting BLE scan...");
 
   // 릴레이 핀 설정
-  pinMode(heaterRelayPin, OUTPUT);
-  digitalWrite(heaterRelayPin, LOW);  // Heater 초기 상태는 OFF
+  pinMode(ledRelayPin, OUTPUT);
+  digitalWrite(ledRelayPin, LOW);  // LED 초기 상태는 OFF
+
+  pinMode(fanRelayPin, OUTPUT);
+  digitalWrite(fanRelayPin, LOW);  // Fan 초기 상태는 OFF
 
   BLEDevice::init("");
 
@@ -180,7 +198,7 @@ void setup() {
   BLEScan* pBLEScan = BLEDevice::getScan();
   pBLEScan->setAdvertisedDeviceCallbacks(new MyAdvertisedDeviceCallbacks());
   pBLEScan->setActiveScan(true);
-  pBLEScan->start(30);  // 30초 동안 스캔
+  pBLEScan->start(360);  
 }
 
 void loop() {

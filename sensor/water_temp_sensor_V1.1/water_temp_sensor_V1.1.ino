@@ -157,7 +157,7 @@ void setup() {
   BLEScan* pBLEScan = BLEDevice::getScan();
   pBLEScan->setAdvertisedDeviceCallbacks(new MyAdvertisedDeviceCallbacks());
   pBLEScan->setActiveScan(true);
-  pBLEScan->start(30);  // 30초 동안 스캔
+  pBLEScan->start(360);  
 
   Serial.println("Scanning for BLE devices...");
 }
